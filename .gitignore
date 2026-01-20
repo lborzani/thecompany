@@ -1,0 +1,9 @@
+node_modules
+.pnpm-debug.log
+.turbo
+dist
+build
+.env
+.DS_Store
+coverage
+.github

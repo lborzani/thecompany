@@ -1,6 +1,6 @@
 import { Stage, Layer, RegularPolygon } from 'react-konva';
 import { KonvaEventObject } from 'konva/lib/Node';
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { useGameStore } from '../../store/gameStore';
 import { generateHexGrid, hexToPixel, HEX_SIZE } from '../../utils/hexGrid';
 import { TokenComponent } from './TokenComponent';
@@ -8,15 +8,28 @@ import { MapLayer } from './MapLayer';
 import { TokenContextMenu } from './TokenContextMenu';
 import { Token } from '@thecompany/shared-types';
 
-// Tamanho fixo do grid para este exemplo inicial
-const CANVAS_WIDTH = window.innerWidth;
-const CANVAS_HEIGHT = window.innerHeight;
-
 export const GameCanvas = () => {
+  const containerRef = useRef<HTMLDivElement>(null);
   const [stageScale, setStageScale] = useState(1);
   const [stagePos, setStagePos] = useState({ x: 0, y: 0 });
   const [contextMenu, setContextMenu] = useState<{ tokenId: string; x: number; y: number } | null>(null);
+  const [canvasSize, setCanvasSize] = useState({ width: 800, height: 600 });
   const tokens = useGameStore(state => state.tokens);
+
+  // Use ResizeObserver to track actual container dimensions
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+
+    const updateSize = () => {
+      setCanvasSize({ width: el.clientWidth, height: el.clientHeight });
+    };
+    updateSize();
+
+    const observer = new ResizeObserver(updateSize);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
 
   // Generate Hex Grid data once
   const hexes = useMemo(() => generateHexGrid(30, 20), []);
@@ -45,19 +58,19 @@ export const GameCanvas = () => {
     });
   };
 
-  const handleContextMenu = (e: KonvaEventObject<PointerEvent>, token: Token) => {
+  const handleContextMenu = useCallback((e: KonvaEventObject<PointerEvent>, token: Token) => {
       setContextMenu({
           tokenId: token.id,
           x: e.evt.clientX,
           y: e.evt.clientY
       });
-  };
+  }, []);
 
   return (
-    <>
+    <div ref={containerRef} className="w-full h-full absolute inset-0">
       <Stage
-        width={CANVAS_WIDTH}
-        height={CANVAS_HEIGHT}
+        width={canvasSize.width}
+        height={canvasSize.height}
         onWheel={handleWheel}
         scaleX={stageScale}
         scaleY={stageScale}
@@ -103,6 +116,6 @@ export const GameCanvas = () => {
               onClose={() => setContextMenu(null)}
           />
       )}
-    </>
+    </div>
   );
 };

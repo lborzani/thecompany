@@ -1,93 +1,86 @@
-// Simple local dice service - no heavy 3D rendering
+import { DiceRollResult, DiceArg, DiceValue, DiceRoom } from '@thecompany/shared-types';
+
+type RollListener = (roll: DiceRollResult) => void;
+
 class DiceService {
-  private listeners: ((roll: any) => void)[] = [];
+  private listeners: RollListener[] = [];
+  private room: DiceRoom | null = null;
 
-  // No API needed anymore
-  constructor() {}
-
-  // Keep signature for compatibility
-  public async initialize(canvas: HTMLCanvasElement) {
-    console.log("DiceService: Simple Mode Initialized (No 3D)");
-    // Clear canvas if needed or just leave it transparent
+  public async initialize(canvas: HTMLCanvasElement): Promise<void> {
     const ctx = canvas.getContext('2d');
     if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
   }
 
-  // Simulate room creation
-  public async createRoom(): Promise<{ slug: string, passcode?: string }> {
-      return { slug: "local-room", passcode: "local" };
+  public async createRoom(): Promise<DiceRoom> {
+    this.room = { slug: 'local-room', passcode: 'local' };
+    return this.room;
   }
 
-  // Simulate room join
-  public async joinRoom(slug: string, passcode?: string) {
-      console.log("DiceService: Joined local virtual room");
+  public async joinRoom(slug: string, passcode?: string): Promise<void> {
+    this.room = { slug, passcode };
   }
 
-  // Generate local random numbers
-  public async roll(diceArgs: { theme?: string, type: string }[], options?: { external_id?: string }) {
-     console.log("DiceService: Calculating Roll...", diceArgs);
+  public async roll(
+    diceArgs: DiceArg[],
+    options?: { external_id?: string; modifier?: number }
+  ): Promise<void> {
+    const values: DiceValue[] = [];
+    let totalValue = 0;
+    const equationParts: string[] = [];
 
-     const values: any[] = [];
-     let totalValue = 0;
-     const equationParts: string[] = [];
+    diceArgs.forEach(die => {
+      const faces = parseInt(die.type.replace('d', ''));
+      const result = Math.floor(Math.random() * faces) + 1;
 
-     diceArgs.forEach(die => {
-         // Extract faces (e.g. "d20" -> 20)
-         const faces = parseInt(die.type.replace('d', ''));
-         
-         // Secure random number
-         const result = Math.floor(Math.random() * faces) + 1;
-         
-         totalValue += result;
-         equationParts.push(die.type);
-         
-         values.push({
-             value: result,
-             type: die.type,
-             label: result.toString() 
-         });
-     });
+      totalValue += result;
+      equationParts.push(die.type);
 
-     // Mock DDDice response structure for compatibility
-     const rollResult = {
-         uuid: crypto.randomUUID(),
-         created_at: new Date().toISOString(),
-         equation: equationParts.join("+"),
-         total_value: totalValue,
-         values: values,
-         user: {
-             // Use external_id passed from ChatPanel or placeholder
-             uuid: options?.external_id || "local-user", 
-             username: "Player" 
-         },
-         is_local: true,
-         external_id: options?.external_id
-     };
+      values.push({
+        value: result,
+        type: die.type,
+        label: result.toString(),
+      });
+    });
 
-     // Instant notify
-     this.notifyListeners(rollResult);
+    const mod = options?.modifier ?? 0;
+    totalValue += mod;
+
+    const rollResult: DiceRollResult = {
+      uuid: crypto.randomUUID(),
+      created_at: new Date().toISOString(),
+      equation: equationParts.join('+') + (mod !== 0 ? (mod > 0 ? `+${mod}` : `${mod}`) : ''),
+      total_value: totalValue,
+      modifier: mod,
+      values,
+      user: {
+        uuid: options?.external_id || 'local-user',
+        username: 'Player',
+      },
+      is_local: true,
+      external_id: options?.external_id,
+    };
+
+    this.notifyListeners(rollResult);
   }
 
-  // Allow replaying a roll received from network so Overlay can show it
-  public replayRoll(roll: any) {
-      this.notifyListeners(roll);
-  }
-  
-  private notifyListeners(roll: any) {
-      console.log("ROLL FINISHED (Local)", roll);
-      this.listeners.forEach(cb => cb(roll));
+  public replayRoll(roll: DiceRollResult): void {
+    this.notifyListeners(roll);
   }
 
-  public onRoll(callback: (roll: any) => void) {
-      this.listeners.push(callback);
+  private notifyListeners(roll: DiceRollResult): void {
+    this.listeners.forEach(cb => cb(roll));
   }
 
-  public offRoll(callback: (roll: any) => void) {
-      this.listeners = this.listeners.filter(cb => cb !== callback);
+  public onRoll(callback: RollListener): void {
+    this.listeners.push(callback);
   }
-  
-  public getRoom() {
-      return { slug: "local", passcode: "" };
+
+  public offRoll(callback: RollListener): void {
+    this.listeners = this.listeners.filter(cb => cb !== callback);
+  }
+
+  public getRoom(): DiceRoom | null {
+    return this.room;
   }
 }
 

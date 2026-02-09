@@ -1,18 +1,10 @@
 import Peer, { DataConnection } from 'peerjs';
-import { useGameStore, User } from '../store/gameStore';
-import { Token } from '@thecompany/shared-types';
+import { useGameStore } from '../store/gameStore';
+import { Token, User, MapState, NetworkEvent, PathfinderCharacter, ContextualRollResult } from '@thecompany/shared-types';
 import { diceService } from './diceService';
 
-export type NetworkEvent = 
-  | { type: 'LOGIN_REQUEST'; payload: { username: string; password?: string } }
-  | { type: 'LOGIN_RESPONSE'; payload: { success: boolean; error?: string; user?: User } }
-  | { type: 'SYNC_STATE'; payload: { tokens: Token[], map: any, users: User[] } }
-  | { type: 'TOKEN_MOVE'; payload: Token }
-  | { type: 'TOKEN_DELETE'; payload: { tokenId: string } }
-  | { type: 'MAP_UPDATE'; payload: any }
-  | { type: 'CHAT_MESSAGE'; payload: { sender: string, content: string, type: 'text' | 'roll', timestamp: number } }
-  | { type: 'DICE_ROOM_CONFIG'; payload: { slug: string, passcode?: string } }
-  | { type: 'DICE_ROLL'; payload: any };
+// Re-export for convenience
+export type { NetworkEvent } from '@thecompany/shared-types';
 
 class NetworkService {
   private peer: Peer | null = null;
@@ -85,12 +77,13 @@ class NetworkService {
 
     // Host NÃO manda mais SYNC_STATE aqui. Espera LOGIN_REQUEST.
 
-    conn.on('data', (data: any) => {
-      this.handleMessage(data, conn);
+    conn.on('data', (data: unknown) => {
+      const message = data as NetworkEvent;
+      this.handleMessage(message, conn);
       
       // Se sou Host, retransmito mensagens de JOGO (não de LOGIN)
-      if (this.isHost && data.type !== 'LOGIN_REQUEST') {
-        this.broadcast(data, conn.peer); 
+      if (this.isHost && message.type !== 'LOGIN_REQUEST') {
+        this.broadcast(message, conn.peer); 
       }
     });
 
@@ -124,6 +117,7 @@ class NetworkService {
         store.setTokens(message.payload.tokens);
         if (message.payload.map) store.setMap(message.payload.map);
         if (message.payload.users) store.setUsers(message.payload.users);
+        if (message.payload.characters) store.setCharacters(message.payload.characters);
         break;
 
       case 'TOKEN_MOVE':
@@ -149,6 +143,34 @@ class NetworkService {
 
       case 'CHAT_MESSAGE':
         store.addChatMessage(message.payload);
+        break;
+
+      case 'CHARACTER_UPDATE':
+        {
+          const existing = store.characters.find(c => c.id === message.payload.id);
+          if (existing) {
+            store.updateCharacter(message.payload);
+          } else {
+            store.addCharacter(message.payload);
+          }
+        }
+        break;
+
+      case 'CHARACTER_DELETE':
+        store.removeCharacter(message.payload.characterId);
+        break;
+
+      case 'CONTEXTUAL_ROLL':
+        diceService.replayRoll(message.payload);
+        store.addChatMessage({
+          id: message.payload.uuid,
+          sender: message.payload.user.username,
+          content: `${message.payload.context.label}: ${message.payload.total_value}`,
+          type: 'contextual_roll',
+          timestamp: Date.now(),
+          color: undefined,
+          rollContext: message.payload.context,
+        });
         break;
 
       default:
@@ -183,7 +205,8 @@ class NetworkService {
        payload: { 
          tokens: store.tokens,
          map: store.map,
-         users: store.users
+         users: store.users,
+         characters: store.characters
        } 
      });
   }
@@ -208,22 +231,46 @@ class NetworkService {
     this.broadcast(message);
   }
 
-  public broadcastMapUpdate(mapState: any) {
+  public broadcastMapUpdate(mapState: MapState) {
     const message: NetworkEvent = { type: 'MAP_UPDATE', payload: mapState };
     useGameStore.getState().setMap(mapState);
     this.broadcast(message);
   }
 
-  public broadcastUserList(users: any[]) {
+  public broadcastUserList(users: User[]) {
       const message: NetworkEvent = { 
           type: 'SYNC_STATE', 
           payload: { 
-              tokens: useGameStore.getState().tokens, // Send everything to be safe, or just users if we optimize SYNC_STATE
+              tokens: useGameStore.getState().tokens,
               users: users,
-              map: useGameStore.getState().map
+              map: useGameStore.getState().map,
+              characters: useGameStore.getState().characters
           } 
       };
       this.broadcast(message);
+  }
+
+  public broadcastCharacterUpdate(character: PathfinderCharacter) {
+    const store = useGameStore.getState();
+    const existing = store.characters.find(c => c.id === character.id);
+    if (existing) {
+      store.updateCharacter(character);
+    } else {
+      store.addCharacter(character);
+    }
+    const message: NetworkEvent = { type: 'CHARACTER_UPDATE', payload: character };
+    this.broadcast(message);
+  }
+
+  public broadcastCharacterDelete(characterId: string) {
+    useGameStore.getState().removeCharacter(characterId);
+    const message: NetworkEvent = { type: 'CHARACTER_DELETE', payload: { characterId } };
+    this.broadcast(message);
+  }
+
+  public broadcastContextualRoll(roll: ContextualRollResult) {
+    const message: NetworkEvent = { type: 'CONTEXTUAL_ROLL', payload: roll };
+    this.broadcast(message);
   }
 }
 

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { network } from '../../services/network';
-import { Lock, User, ArrowRight, AlertCircle, ArrowLeft } from 'lucide-react';
+import { Lock, User, ArrowRight, AlertCircle, ArrowLeft, Loader2 } from 'lucide-react';
 
 interface LoginScreenProps {
     onBack: () => void;
@@ -13,18 +13,11 @@ export const LoginScreen = ({ onBack }: LoginScreenProps) => {
     const [status, setStatus] = useState<'connecting' | 'idle' | 'authenticating'>('idle');
 
     useEffect(() => {
-        // Setup network callbacks
         network.onAuthError = (msg) => {
             setError(msg);
             setStatus('idle');
         };
-        
-        // On success, the store is updated, and the parent component should switch the view
-        // But we can also set a local state if needed.
-        
-        return () => {
-            network.onAuthError = null;
-        };
+        return () => { network.onAuthError = null; };
     }, []);
 
     const handleLogin = () => {
@@ -35,34 +28,37 @@ export const LoginScreen = ({ onBack }: LoginScreenProps) => {
     };
 
     return (
-        <div className="h-screen w-screen bg-zinc-900 flex items-center justify-center relative">
+        <div className="h-screen w-screen bg-surface-0 flex items-center justify-center relative">
+            <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_rgba(99,102,241,0.06)_0%,_transparent_60%)]" />
+
             <button 
                 onClick={onBack}
-                className="absolute top-4 left-4 text-zinc-400 hover:text-white flex items-center gap-2"
+                className="absolute top-4 left-4 btn-ghost z-10"
             >
-                <ArrowLeft size={20} /> Back
+                <ArrowLeft size={18} /> Back
             </button>
-            <div className="bg-zinc-800 p-8 rounded-xl shadow-2xl w-full max-w-sm border border-zinc-700">
+
+            <div className="card p-7 w-full max-w-sm shadow-2xl relative z-10">
                 <div className="text-center mb-6">
-                    <h2 className="text-2xl font-bold text-white mb-2">Identify Yourself</h2>
-                    <p className="text-zinc-400 text-sm">Enter your character credentials provided by the GM.</p>
+                    <h2 className="text-lg font-bold text-zinc-100 mb-1.5">Identify Yourself</h2>
+                    <p className="text-sm text-zinc-500">Enter the credentials provided by your GM.</p>
                 </div>
 
                 {error && (
-                    <div className="bg-red-500/10 border border-red-500/50 p-3 rounded mb-4 flex items-center gap-2 text-red-500 text-sm">
-                        <AlertCircle size={16} />
+                    <div className="bg-red-500/10 border border-red-500/20 p-3 rounded-lg mb-4 flex items-center gap-2 text-red-400 text-sm animate-fade-in">
+                        <AlertCircle size={15} />
                         {error}
                     </div>
                 )}
 
-                <div className="space-y-4">
+                <div className="space-y-3">
                     <div>
-                        <label className="text-xs font-bold text-zinc-500 uppercase mb-1 block">Username</label>
+                        <label className="label mb-1.5 block">Username</label>
                         <div className="relative">
-                            <User className="absolute left-3 top-2.5 text-zinc-500" size={16} />
+                            <User className="absolute left-3 top-2.5 text-zinc-600" size={15} />
                             <input 
                                 type="text" 
-                                className="w-full bg-zinc-900 border border-zinc-700 text-white pl-10 pr-3 py-2 rounded focus:border-blue-500 outline-none transition-colors"
+                                className="input !pl-9"
                                 placeholder="Character Name"
                                 value={username}
                                 onChange={e => setUsername(e.target.value)}
@@ -72,12 +68,12 @@ export const LoginScreen = ({ onBack }: LoginScreenProps) => {
                     </div>
 
                     <div>
-                        <label className="text-xs font-bold text-zinc-500 uppercase mb-1 block">Password (Optional)</label>
+                        <label className="label mb-1.5 block">Password <span className="text-zinc-700">(Optional)</span></label>
                         <div className="relative">
-                            <Lock className="absolute left-3 top-2.5 text-zinc-500" size={16} />
-                             <input 
+                            <Lock className="absolute left-3 top-2.5 text-zinc-600" size={15} />
+                            <input 
                                 type="password" 
-                                className="w-full bg-zinc-900 border border-zinc-700 text-white pl-10 pr-3 py-2 rounded focus:border-blue-500 outline-none transition-colors"
+                                className="input !pl-9"
                                 placeholder="Secret"
                                 value={password}
                                 onChange={e => setPassword(e.target.value)}
@@ -89,12 +85,12 @@ export const LoginScreen = ({ onBack }: LoginScreenProps) => {
                     <button 
                         onClick={handleLogin}
                         disabled={status === 'authenticating' || !username}
-                        className="w-full bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold py-2 rounded flex items-center justify-center gap-2 mt-2"
+                        className="btn-primary w-full mt-1"
                     >
                         {status === 'authenticating' ? (
-                            'Verifying...'
+                            <><Loader2 size={15} className="animate-spin" /> Verifying...</>
                         ) : (
-                            <>Login <ArrowRight size={16} /></>
+                            <>Login <ArrowRight size={15} /></>
                         )}
                     </button>
                 </div>

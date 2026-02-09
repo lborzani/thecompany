@@ -1,23 +1,8 @@
 import { get, set, del, keys } from 'idb-keyval';
-import { Token } from '@thecompany/shared-types';
+import { CampaignMetadata, SavedGameState } from '@thecompany/shared-types';
 
-export interface CampaignMetadata {
-  id: string;
-  name: string;
-  lastPlayed: number;
-  createdAt: number;
-}
-
-export interface SavedGameState {
-  campaignId: string;
-  campaignName: string;
-  tokens: Token[];
-  map: {
-    imageUrl: string | null;
-    scale: number;
-    offset: { x: number; y: number };
-  };
-}
+// Re-export for convenience
+export type { CampaignMetadata, SavedGameState } from '@thecompany/shared-types';
 
 const CAMPAIGN_PREFIX = 'campaign-';
 

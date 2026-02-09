@@ -1,22 +1,19 @@
 import { useState, useRef, useEffect } from "react";
-import { Send, X, AlertCircle } from "lucide-react";
+import { Send, X, Dices } from "lucide-react";
 import { useGameStore } from "../../store/gameStore";
 import { network } from "../../services/network";
 import { diceService } from "../../services/diceService";
+import { DiceRollResult, ChatMessage } from '@thecompany/shared-types';
 
-interface DiceButtonProps {
-    faces: number;
-    label: string;
-    onClick: () => void;
-}
+const DICE_FACES = [4, 6, 8, 10, 12, 20] as const;
 
-const DiceButton = ({ faces, label, onClick }: DiceButtonProps) => (
+const DiceButton = ({ faces, onClick }: { faces: number; onClick: () => void }) => (
     <button
         onClick={onClick}
-        className="w-8 h-8 md:w-10 md:h-10 bg-zinc-700 hover:bg-zinc-600 rounded flex items-center justify-center font-bold text-zinc-300 text-xs md:text-sm border border-zinc-600 transition-colors"
+        className="h-8 bg-surface-4 hover:bg-surface-5 rounded-md flex items-center justify-center font-mono font-semibold text-zinc-400 hover:text-brand-400 text-xs border border-border hover:border-brand-500/30 transition-all"
         title={`Roll d${faces}`}
     >
-        {label}
+        d{faces}
     </button>
 );
 
@@ -25,7 +22,6 @@ export const ChatPanel = () => {
     const [showDiceModal, setShowDiceModal] = useState<{ faces: number } | null>(null);
     const messages = useGameStore(state => state.chatMessages);
     const currentUser = useGameStore(state => state.currentUser);
-    const users = useGameStore(state => state.users);
     const diceRoom = useGameStore(state => state.diceRoom);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const [modifier, setModifier] = useState(0);
@@ -39,52 +35,43 @@ export const ChatPanel = () => {
         scrollToBottom();
     }, [messages]);
 
-    // Listen for dice rolls from the service
     useEffect(() => {
-        const handleRoll = (roll: any) => {
-            // Check if equation exists (e.g. 1d20)
+        const handleRoll = (roll: DiceRollResult) => {
             const equation = roll.equation || "Dice";
             const total = roll.total_value;
-            
-            // Extract user name from dddice event
-            // We use external_id to match with our local P2P users
             const rollerExternalId = roll.external_id;
             const rollerName = roll.user?.username || "Unknown";
-
             const rollId = roll.uuid || crypto.randomUUID();
             
-            // Individual values breakdown if multiple dice
             let breakdown = "";
             if (roll.values && roll.values.length > 1) {
-                const vals = roll.values.map((v: any) => v.value).join(" + ");
+                const vals = roll.values.map(v => v.value).join(" + ");
                 breakdown = `( ${vals} ) = `;
             }
 
-            const content = `Rolled ${equation}: ${breakdown}[ ${total} ]`;
+            const modStr = roll.modifier !== 0 ? (roll.modifier > 0 ? ` +${roll.modifier}` : ` ${roll.modifier}`) : '';
+            const content = `Rolled ${equation}${modStr}: ${breakdown}[ ${total} ]`;
             
-            // Try to match with local users
             const localUsers = useGameStore.getState().users;
             const knownUser = localUsers.find(u => u.id === rollerExternalId) 
                            || localUsers.find(u => u.username === rollerName);
             
-            // Use local user data if found, otherwise fallback to dddice data
             const displaySender = knownUser ? knownUser.username : (rollerName !== "Unknown" ? rollerName : "??");
             const displayColor = knownUser ? knownUser.color : "#ffaa00";
 
-            const chatMsg = {
+            const chatMsg: ChatMessage = {
                 id: rollId,
                 sender: displaySender,
                 content: content, 
-                type: 'roll' as const,
+                type: 'roll',
                 timestamp: Date.now(),
                 color: displayColor
             };
 
             useGameStore.getState().addChatMessage(chatMsg);
 
-            // Broadcast to other peers if this roll was generated locally
             if (roll.is_local) {
-                const networkPayload = { ...roll, is_local: false };
+                const networkPayload: DiceRollResult = { ...roll, is_local: false };
                 network.broadcast({ type: 'DICE_ROLL', payload: networkPayload });
             }
         };
@@ -123,62 +110,67 @@ export const ChatPanel = () => {
     const confirmRoll = async () => {
         if (!showDiceModal || !currentUser) return;
 
-        // 1. Executa a rolagem Visual 3D
-        // "theme": "dddice-standard" é o basicão (OBRIGATÓRIO enviar theme)
         const diceArgs = [];
-        for(let i=0; i<count; i++) {
-            diceArgs.push({ 
-                type: `d${showDiceModal.faces}`, 
-                theme: "dddice-bees" // Mudando para dddice-red que é garantido existir ou dddice-standard
-            }); 
+        for (let i = 0; i < count; i++) {
+            diceArgs.push({ type: `d${showDiceModal.faces}` }); 
         }
         
-        console.log("Rolling dice:", diceArgs);
-        await diceService.roll(diceArgs, { external_id: currentUser.id });
-        
+        await diceService.roll(diceArgs, { external_id: currentUser.id, modifier });
         setShowDiceModal(null);
     };
 
-    return (
-        <div className="absolute bottom-4 right-4 z-40 w-80 h-96 bg-zinc-900/95 backdrop-blur border border-zinc-700 rounded-lg flex flex-col shadow-2xl overflow-hidden">
-             {/* Header */}
-             <div className="bg-zinc-800 p-2 flex items-center justify-between border-b border-zinc-700">
-                <span className="font-bold text-zinc-300 text-sm">Chat & Dice</span>
-                <span className="text-[10px] text-zinc-500 uppercase tracking-wider">P2P Encrypted</span>
-             </div>
+    const formatTime = (ts: number) => {
+        const d = new Date(ts);
+        return `${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}`;
+    };
 
+    return (
+        <div className="h-full flex flex-col bg-surface-1 border-l border-border relative">
              {/* Messages Area */}
-             <div className="flex-1 overflow-y-auto p-3 space-y-2">
+             <div className="flex-1 overflow-y-auto p-3 space-y-1.5">
                 {messages.length === 0 && (
-                    <div className="text-zinc-500 text-center text-xs mt-4 italic">
-                        No messages yet. Start chatting or roll some dice!
+                    <div className="flex flex-col items-center justify-center h-full text-zinc-600 gap-2">
+                        <Dices size={28} strokeWidth={1.5} />
+                        <p className="text-xs text-center">No messages yet.<br/>Start chatting or roll some dice!</p>
                     </div>
                 )}
                 {messages.map(m => (
-                    <div key={m.id} className="text-sm">
-                        <span className="font-bold mr-2" style={{ color: m.color || '#fff' }}>[{m.sender}]:</span>
-                        <span className={m.type === 'roll' ? 'text-blue-400 font-mono italic' : 'text-zinc-300'}>
-                            {m.content}
+                    <div key={m.id} className="group text-[13px] leading-relaxed py-0.5 hover:bg-surface-2/50 -mx-1 px-1 rounded">
+                        <span className="text-[10px] text-zinc-700 mr-1.5 opacity-0 group-hover:opacity-100 transition-opacity font-mono">
+                            {formatTime(m.timestamp)}
                         </span>
+                        <span className="font-semibold mr-1.5" style={{ color: m.color || '#fff' }}>{m.sender}</span>
+                        {m.type === 'contextual_roll' && m.rollContext ? (
+                            <span className="text-violet-400 font-mono text-xs">
+                                <span className="text-zinc-600 text-[10px]">{m.rollContext.characterName} — </span>
+                                {m.content}
+                                {m.rollContext.modifierBreakdown && m.rollContext.modifierBreakdown.length > 0 && (
+                                    <span className="text-zinc-700 text-[10px] ml-1">
+                                        ({m.rollContext.modifierBreakdown.map(b => `${b.source} ${b.value >= 0 ? '+' : ''}${b.value}`).join(', ')})
+                                    </span>
+                                )}
+                            </span>
+                        ) : m.type === 'roll' ? (
+                            <span className="text-brand-400 font-mono text-xs">{m.content}</span>
+                        ) : (
+                            <span className="text-zinc-300">{m.content}</span>
+                        )}
                     </div>
                 ))}
                 <div ref={messagesEndRef} />
              </div>
 
              {/* Dice Controls */}
-             <div className="p-2 bg-zinc-800 border-t border-zinc-700 grid grid-cols-6 gap-1">
-                 <DiceButton faces={4} label="d4" onClick={() => handleRollClick(4)} />
-                 <DiceButton faces={6} label="d6" onClick={() => handleRollClick(6)} />
-                 <DiceButton faces={8} label="d8" onClick={() => handleRollClick(8)} />
-                 <DiceButton faces={10} label="d10" onClick={() => handleRollClick(10)} />
-                 <DiceButton faces={12} label="d12" onClick={() => handleRollClick(12)} />
-                 <DiceButton faces={20} label="d20" onClick={() => handleRollClick(20)} />
+             <div className="px-2.5 py-2 border-t border-border grid grid-cols-6 gap-1.5">
+                 {DICE_FACES.map(f => (
+                     <DiceButton key={f} faces={f} onClick={() => handleRollClick(f)} />
+                 ))}
              </div>
 
              {/* Input Area */}
-             <div className="p-2 bg-zinc-800 border-t border-zinc-700 flex gap-2">
+             <div className="p-2.5 border-t border-border flex gap-2">
                  <input 
-                    className="flex-1 bg-zinc-900 border border-zinc-600 rounded px-2 py-1 text-sm text-white focus:border-blue-500 outline-none"
+                    className="input flex-1 !py-1.5 text-sm"
                     placeholder="Type a message..."
                     value={msg}
                     onChange={e => setMsg(e.target.value)}
@@ -186,7 +178,7 @@ export const ChatPanel = () => {
                  />
                  <button 
                     onClick={sendMessage}
-                    className="bg-blue-600 hover:bg-blue-500 text-white p-2 rounded"
+                    className="btn-primary !px-3 !py-1.5"
                  >
                      <Send size={14} />
                  </button>
@@ -194,40 +186,44 @@ export const ChatPanel = () => {
 
              {/* Roll Modal Popover */}
              {showDiceModal && (
-                 <div className="absolute inset-x-0 bottom-[88px] bg-zinc-800 border-t border-zinc-600 p-4 animate-in slide-in-from-bottom-2">
+                 <div className="absolute inset-x-0 bottom-[88px] bg-surface-3 border-t border-border p-4 animate-slide-up shadow-xl">
                      <div className="flex justify-between items-center mb-3">
-                         <h3 className="font-bold text-white text-sm">Roll {count}d{showDiceModal.faces} {modifier !== 0 && (modifier > 0 ? `+${modifier}` : modifier)}</h3>
-                         <button onClick={() => setShowDiceModal(null)}><X size={14} className="text-zinc-400"/></button>
+                         <h3 className="font-bold text-zinc-100 text-sm font-mono">
+                             {count}d{showDiceModal.faces}{modifier !== 0 && (modifier > 0 ? ` +${modifier}` : ` ${modifier}`)}
+                         </h3>
+                         <button onClick={() => setShowDiceModal(null)} className="text-zinc-500 hover:text-zinc-300 transition-colors">
+                             <X size={14} />
+                         </button>
                      </div>
                      
-                     <div className="grid grid-cols-2 gap-4 mb-4">
+                     <div className="grid grid-cols-2 gap-3 mb-3">
                          <div>
-                             <label className="block text-xs uppercase text-zinc-500 font-bold mb-1">Count</label>
+                             <label className="label mb-1 block">Count</label>
                              <input 
                                 type="number" 
                                 min="1" 
                                 max="10" 
                                 value={count}
                                 onChange={e => setCount(Math.max(1, parseInt(e.target.value) || 1))}
-                                className="w-full bg-zinc-900 border border-zinc-600 rounded px-2 py-1 text-white text-sm"
+                                className="input !py-1.5 text-sm"
                              />
                          </div>
                          <div>
-                             <label className="block text-xs uppercase text-zinc-500 font-bold mb-1">Modifier</label>
+                             <label className="label mb-1 block">Modifier</label>
                              <input 
                                 type="number" 
                                 value={modifier}
                                 onChange={e => setModifier(parseInt(e.target.value) || 0)}
-                                className="w-full bg-zinc-900 border border-zinc-600 rounded px-2 py-1 text-white text-sm"
+                                className="input !py-1.5 text-sm"
                              />
                          </div>
                      </div>
 
                      <button 
                         onClick={confirmRoll}
-                        className="w-full py-2 bg-purple-600 hover:bg-purple-500 text-white font-bold rounded text-sm uppercase tracking-wide flex items-center justify-center gap-2"
+                        className="w-full py-2 bg-violet-600 hover:bg-violet-500 text-white font-semibold rounded-lg text-sm flex items-center justify-center gap-2 transition-colors"
                      >
-                         Roll Dice
+                         <Dices size={15} /> Roll Dice
                      </button>
                  </div>
              )}

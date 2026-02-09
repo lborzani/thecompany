@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { storageService, CampaignMetadata } from '../../services/storage';
 import { useGameStore } from '../../store/gameStore';
-import { Play, Plus, Trash2, FolderOpen } from 'lucide-react';
+import { Plus, Trash2, FolderOpen, Zap } from 'lucide-react';
 
 interface LobbyScreenProps {
   onStart: () => void;
@@ -40,7 +40,7 @@ export const LobbyScreen = ({ onStart }: LobbyScreenProps) => {
 
   const handleDelete = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
-    if (confirm('Are you sure you want to delete this campaign?')) {
+    if (confirm('Delete this campaign permanently?')) {
         await storageService.deleteCampaign(id);
         refreshList();
     }
@@ -53,37 +53,39 @@ export const LobbyScreen = ({ onStart }: LobbyScreenProps) => {
 
   return (
     <div className="h-full w-full flex flex-col items-center justify-center p-8 space-y-6">
-      <h2 className="text-2xl font-bold text-white">Campaign Manager</h2>
+      <h2 className="text-xl font-bold text-zinc-100">Campaign Manager</h2>
 
       {/* Campaign List */}
-      <div className="w-full max-w-md space-y-3 max-h-[400px] overflow-y-auto pr-2">
+      <div className="w-full max-w-md space-y-2 max-h-[360px] overflow-y-auto pr-1">
         {campaigns.map(camp => (
             <div 
                 key={camp.id}
                 onClick={() => handleLoad(camp.id)}
-                className="bg-zinc-800 p-4 rounded-lg flex items-center justify-between cursor-pointer hover:bg-zinc-700 transition-colors border border-zinc-700"
+                className="card p-4 flex items-center justify-between cursor-pointer hover:bg-surface-4 transition-colors group"
             >
                 <div>
-                    <h3 className="font-bold text-white">{camp.name}</h3>
-                    <p className="text-xs text-zinc-400">Last played: {new Date(camp.lastPlayed).toLocaleDateString()}</p>
+                    <h3 className="font-semibold text-sm text-zinc-200">{camp.name}</h3>
+                    <p className="text-[11px] text-zinc-600 mt-0.5">
+                      Last played: {new Date(camp.lastPlayed).toLocaleDateString()}
+                    </p>
                 </div>
-                <div className="flex gap-2">
-                    <button className="text-blue-400 hover:text-blue-300 p-2">
-                       <FolderOpen size={18} />
+                <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button className="btn-ghost !p-1.5 text-brand-400">
+                       <FolderOpen size={15} />
                     </button>
                     <button 
                         onClick={(e) => handleDelete(e, camp.id)}
-                        className="text-red-400 hover:text-red-300 p-2"
+                        className="btn-ghost !p-1.5 text-red-400 hover:bg-red-500/10"
                     >
-                       <Trash2 size={18} />
+                       <Trash2 size={15} />
                     </button>
                 </div>
             </div>
         ))}
 
         {campaigns.length === 0 && (
-            <div className="text-center text-zinc-500 py-8 italic">
-                No saved campaigns found.
+            <div className="text-center text-zinc-600 py-10 text-sm">
+                No saved campaigns yet.
             </div>
         )}
       </div>
@@ -93,48 +95,43 @@ export const LobbyScreen = ({ onStart }: LobbyScreenProps) => {
          {!isCreating ? (
             <button 
                 onClick={() => setIsCreating(true)}
-                className="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-lg flex items-center justify-center gap-2 font-medium"
+                className="btn-primary w-full"
             >
-                <Plus size={18} />
-                Create New Campaign (Persistent)
+                <Plus size={16} />
+                New Campaign
             </button>
          ) : (
             <div className="flex gap-2">
                 <input 
                     type="text"
                     autoFocus
-                    placeholder="Enter Campaign Name..."
-                    className="flex-1 bg-zinc-900 border border-zinc-600 rounded px-4 text-white outline-none focus:border-blue-500"
+                    placeholder="Campaign Name..."
+                    className="input flex-1"
                     value={newCampaignName}
                     onChange={e => setNewCampaignName(e.target.value)}
                     onKeyDown={e => e.key === 'Enter' && handleCreate()}
                 />
-                <button 
-                    onClick={handleCreate}
-                    className="bg-green-600 px-4 rounded hover:bg-green-500 text-white"
-                >
+                <button onClick={handleCreate} className="btn-primary !px-5">
                     Create
                 </button>
-                 <button 
-                    onClick={() => setIsCreating(false)}
-                    className="bg-zinc-700 px-4 rounded hover:bg-zinc-600 text-zinc-300"
-                >
+                <button onClick={() => setIsCreating(false)} className="btn-ghost">
                     Cancel
                 </button>
             </div>
          )}
 
-         <div className="relative py-2">
-            <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-zinc-700"></div></div>
-            <div className="relative flex justify-center text-sm"><span className="px-2 bg-zinc-900 text-zinc-500">OR</span></div>
+         <div className="flex items-center gap-3 py-1">
+            <div className="flex-1 h-px bg-border" />
+            <span className="text-xs text-zinc-600">or</span>
+            <div className="flex-1 h-px bg-border" />
          </div>
 
          <button 
             onClick={handleTempSession}
-            className="w-full py-3 bg-zinc-800 hover:bg-zinc-700 border border-zinc-600 text-zinc-300 rounded-lg flex items-center justify-center gap-2 text-sm"
+            className="btn-ghost w-full border border-border"
          >
-            <Play size={16} />
-            Start Temporary Session (No Save)
+            <Zap size={15} />
+            Quick Session (No Save)
          </button>
       </div>
     </div>

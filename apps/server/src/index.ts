@@ -12,6 +12,8 @@ import {
 const app = express();
 const httpServer = createServer(app);
 
+const CORS_ORIGIN = process.env.CORS_ORIGIN || 'http://localhost:5173';
+
 // Simple in-memory state
 let tokens: Token[] = [
   { id: 'token-1', x: 100, y: 100, color: 'red' },
@@ -25,8 +27,8 @@ const io = new Server<
   SocketData
 >(httpServer, {
   cors: {
-    origin: "http://localhost:5173", // Vite default port
-    methods: ["GET", "POST"]
+    origin: CORS_ORIGIN,
+    methods: ['GET', 'POST']
   }
 });
 
@@ -57,7 +59,7 @@ io.on("connection", (socket) => {
   });
 });
 
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 
 httpServer.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);

@@ -1,13 +1,14 @@
 import { useEffect, useState } from 'react';
 import { diceService } from '../../services/diceService';
+import { DiceRollResult } from '@thecompany/shared-types';
 
 export const DiceOverlay = () => {
-    const [result, setResult] = useState<any>(null);
+    const [result, setResult] = useState<DiceRollResult | null>(null);
     const [displayValue, setDisplayValue] = useState(1);
     const [phase, setPhase] = useState<'hidden' | 'rolling' | 'result'>('hidden');
 
     useEffect(() => {
-        const handleRoll = (roll: any) => {
+        const handleRoll = (roll: DiceRollResult) => {
             // Check if it's a D20 roll for special effects, otherwise just show total
             setResult(roll);
             setPhase('rolling');

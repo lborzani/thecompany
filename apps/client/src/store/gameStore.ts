@@ -1,81 +1,63 @@
 import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
-import { Token } from '@thecompany/shared-types';
-import { storageService, SavedGameState } from '../services/storage';
+import { Token, User, MapState, ChatMessage, DiceRoom, SavedGameState, PathfinderCharacter } from '@thecompany/shared-types';
+import { storageService } from '../services/storage';
 
-export interface User {
-  id: string;
-  username: string;
-  password?: string; // Host stores the password (simple implementation for now)
-  color: string;
-  isGM: boolean;
-}
+// Re-export for convenience
+export type { User } from '@thecompany/shared-types';
 
-interface MapState {
-  imageUrl: string | null;
-  scale: number;
-  offset: { x: number; y: number };
-}
-
-export interface ChatMessage {
-  id: string;
-  sender: string;
-  content: string; 
-  type: 'text' | 'roll';
-  timestamp: number;
-  color?: string;
-}
+// Pre-computed hex positions for initial tokens
+// HEX_SIZE=60: hexToPixel(q,r) = { x: 60*(√3*q + √3/2*r), y: 60*(3/2*r) }
+const INITIAL_TOKENS: Token[] = [
+    { id: 'token-1', x: 727, y: 360, color: '#ef4444', label: 'Red' },
+    { id: 'token-2', x: 935, y: 360, color: '#3b82f6', label: 'Blue' },
+];
 
 interface GameState {
-  // Session Info
   campaignId: string | null;
   campaignName: string;
-  isTemp: boolean; // Se true, não salva no disco
+  isTemp: boolean;
 
-  // Auth / Users
   users: User[];
-  currentUser: User | null; // Quem SOU EU nesta sessão
+  currentUser: User | null;
 
-  // Game Data
   tokens: Token[];
-  map: MapState; 
-  diceRoom: { slug: string; passcode?: string } | null;
+  map: MapState;
+  diceRoom: DiceRoom | null;
   chatMessages: ChatMessage[];
-  
-  // Actions
+  characters: PathfinderCharacter[];
+
   setTokens: (tokens: Token[]) => void;
   updateToken: (token: Token) => void;
   removeToken: (tokenId: string) => void;
   setMap: (map: MapState) => void;
-  setDiceRoom: (room: { slug: string; passcode?: string } | null) => void;
+  setDiceRoom: (room: DiceRoom | null) => void;
   addChatMessage: (msg: ChatMessage) => void;
-  
-  // User Actions
+
   addUser: (user: User) => void;
   updateUser: (user: User) => void;
   removeUser: (userId: string) => void;
   setCurrentUser: (user: User | null) => void;
-  setUsers: (users: User[]) => void; // Sync from Host
+  setUsers: (users: User[]) => void;
 
-  // Session Actions
+  addCharacter: (character: PathfinderCharacter) => void;
+  updateCharacter: (character: PathfinderCharacter) => void;
+  removeCharacter: (characterId: string) => void;
+  setCharacters: (characters: PathfinderCharacter[]) => void;
+
   loadSession: (data: SavedGameState) => void;
   createSession: (name: string, isTemp: boolean) => void;
 }
 
-const INITIAL_TOKENS: Token[] = [
-    { id: 'token-1', x: 2, y: 2, color: 'red' }, 
-    { id: 'token-2', x: 5, y: 5, color: '#3b82f6' }, 
-];
-
 export const GM_USER: User = {
     id: 'gm',
     username: 'Game Master',
-    color: '#ff0000',
+    color: '#ef4444',
     isGM: true,
 };
 
 export const useGameStore = create<GameState>()(
-  subscribeWithSelector((set, get) => ({
+  subscribeWithSelector((set, _get) => ({
     campaignId: null,
     campaignName: 'Untitled Session',
     isTemp: true,
@@ -91,6 +73,7 @@ export const useGameStore = create<GameState>()(
     },
     diceRoom: null,
     chatMessages: [],
+    characters: [],
 
     setTokens: (tokens) => set({ tokens }),
     
@@ -113,15 +96,24 @@ export const useGameStore = create<GameState>()(
     removeUser: (userId) => set(state => ({ users: state.users.filter(u => u.id !== userId) })),
     setCurrentUser: (user) => set({ currentUser: user }),
 
+    setCharacters: (characters) => set({ characters }),
+    addCharacter: (character) => set(state => ({ characters: [...state.characters, character] })),
+    updateCharacter: (character) => set(state => ({
+      characters: state.characters.map(c => c.id === character.id ? character : c)
+    })),
+    removeCharacter: (characterId) => set(state => ({
+      characters: state.characters.filter(c => c.id !== characterId)
+    })),
+
     loadSession: (data: SavedGameState) => {
         set({
             campaignId: data.campaignId,
             campaignName: data.campaignName,
             tokens: data.tokens,
             map: data.map,
-            // @ts-ignore - Handle legacy saves without users
-            users: data.users || [GM_USER],
-            currentUser: GM_USER, // Host is always GM when loading
+            users: data.users && data.users.length > 0 ? data.users : [GM_USER],
+            characters: data.characters ?? [],
+            currentUser: GM_USER,
             isTemp: false
         });
     },
@@ -133,6 +125,7 @@ export const useGameStore = create<GameState>()(
             isTemp,
             tokens: INITIAL_TOKENS,
             users: [GM_USER],
+            characters: [],
             currentUser: GM_USER,
             map: {
                 imageUrl: null,
@@ -145,7 +138,7 @@ export const useGameStore = create<GameState>()(
 );
 
 // Auto-Save Subscription
-let saveTimeout: NodeJS.Timeout;
+let saveTimeout: ReturnType<typeof setTimeout>;
 useGameStore.subscribe(
     (state) => state, // Subscribe to entire state changes
     (state) => {
@@ -161,8 +154,8 @@ useGameStore.subscribe(
                 campaignName: state.campaignName,
                 tokens: state.tokens,
                 map: state.map,
-                // @ts-ignore
-                users: state.users
+                users: state.users,
+                characters: state.characters
             });
         }, 1000); // Salva 1s após a última mudança
     }
